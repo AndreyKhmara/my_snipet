@@ -1,0 +1,309 @@
+react/redux/saga 
+SERVER
+1. в корне проекта npx create-gitignore node
+2. создать папку server
+3. npm init -y 
+4. npx eslint --init
+    To check syntax, find problems, and enforce code style
+    CommonJS (require/exports)
+    None of these
+    No
+    Node
+    Airbnb
+    Javascript
+    Yes
+    npm
+5. npm i express morgan sequelize sequelize-cli pg pg-hstore cors dotenv express-session session-file-store bcrypt axios
+6. .sequelizerc
+  
+   const path = require('path');
+   module.exports = {
+    'config': path.resolve('db', 'database.js'),
+    'models-path': path.resolve('db', 'models'),
+    'seeders-path': path.resolve('db', 'seeders'),
+    'migrations-path': path.resolve('db', 'migrations')
+  };
+6.1. npx sequelize-cli init
+6.2. db/database.js
+    require('dotenv').config();
+    module.exports = {
+      development: {
+        username: process.env.DB_USER,
+        password: process.env.DB_PASS,
+        database: process.env.DB_NAME,
+        host: '127.0.0.1',
+        dialect: 'postgres',
+      },
+      test: {
+        username: 'root',
+        password: null,
+        database: 'database_test',
+        host: '127.0.0.1',
+        dialect: 'mysql',
+      },
+      production: {
+        username: 'root',
+        password: null,
+        database: 'database_production',
+        host: '127.0.0.1',
+        dialect: 'mysql',
+      },
+    };
+7. .env
+    PORT=3001
+    DB_USER=iwanherger
+    DB_NAME=
+    DB_PASS=null
+8. server.js 
+    const express = require('express');
+    const morgan = require('morgan');
+    const cors = require('cors');
+    const session = require('express-session');
+    const FileStore = require('session-file-store')(session);
+    const userRouter = require('./routes/userRouter');
+    require('dotenv').config();
+    const app = express();
+    const PORT = process.env.PORT || 3001;
+    app.use(cors({
+      credentials: true,
+      origin: true,
+    }));
+    app.use(morgan('dev'));
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
+    app.use(session({
+      name: 'sid',
+      secret: process.env.SESSION_SECRET ?? 'test',
+      resave: true,
+      store: new FileStore(),
+      saveUninitialized: false,
+      cookie: {
+        maxAge: 1000 * 60 * 60 * 12,
+        httpOnly: true,
+      },
+    }));
+    app.use('/user', userRouter);
+    app.listen(PORT, () => console.log(`Server has started on PORT ${PORT}`));
+9. routes/userRouter.js
+    const express = require('express');
+    const { User } = require('../db/models');
+    const router = express.Router();
+    router.post('/signup', async (req, res) => {
+      const { name, email, password } = req.body.inputs;
+      console.log({ name, email, password });
+      if (name && email && password) {
+        try {
+          const [user, created] = await User.findOrCreate({
+            where: { email },
+            defaults: { name, password },
+          });
+          if (created) {
+            const sessionUser = JSON.parse(JSON.stringify(user));
+            delete sessionUser.password;
+            req.session.user = sessionUser;
+            return res.json(sessionUser);
+          }
+          return res.sendStatus(401);
+        } catch (e) {
+          console.log(e);
+          return res.sendStatus(500);
+        }
+      }
+      return res.sendStatus(500);
+    });
+    router.post('/login', async (req, res) => {
+      const { email, password } = req.body.inputs;
+      if (email && password) {
+        try {
+          const user = await User.findOne({
+            where: { email },
+          });
+          if (user.password === password) {
+            const sessionUser = JSON.parse(JSON.stringify(user));
+            delete sessionUser.password;
+            req.session.user = sessionUser;
+            return res.json(sessionUser);
+          }
+          return res.sendStatus(401);
+        } catch (e) {
+          console.log(e);
+          return res.sendStatus(500);
+        }
+      }
+      return res.sendStatus(500);
+    });
+    router.post('/check', (req, res) => {
+      if (req.session.user) {
+        return res.json(req.session.user);
+      }
+      return res.sendStatus(401);
+    });
+    router.get('/logout', (req, res) => {
+      req.session.destroy();
+      res.clearCookie('sid').sendStatus(200);
+    });
+    module.exports = router;
+  
+  CLIENT
+  1. в корне проекта npx create-react-app client 
+  2. если новый репозиторий то удаляем .git в клиенте - rm -rf .git
+  3. npm init -y 
+  4. npx eslint --init
+  5. cd /client   
+    npm i axios @reduxjs/toolkit redux-saga react-router-dom react-redux
+  6. Удаляем следующие файлы 
+  setupTests.js
+  reportWebVitals.js
+  logo.svg
+  App.css
+  7.index.js
+  import axios from 'axios';
+  import React from 'react';
+  import ReactDOM from 'react-dom/client';
+  import { BrowserRouter } from 'react-router-dom';
+  import { Provider } from 'react-redux';
+  import App from './App';
+  import store from './redux/store';
+  axios.defaults.baseURL = 'http://localhost:3001';
+  axios.defaults.withCredentials = true;
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(
+    <BrowserRouter>
+      <Provider store={store}>
+        <App />
+      </Provider>
+    </BrowserRouter>,
+  );
+  8. App.jsx
+  import React, { useEffect } from 'react';
+  import { useDispatch, useSelector } from 'react-redux';
+  import { Route, Routes } from 'react-router-dom';
+  import SignInPage from './components/SignInPage';
+  import SignUpPage from './components/SignUpPage';
+  import { checkAuth } from './redux/actions/userActions';
+  function App() {
+    const user = useSelector((state) => state.user);
+    const dispatch = useDispatch();
+    useEffect(() => {
+      dispatch(checkAuth);
+    }, []);
+    return (
+      <>
+        <Routes>
+          <Route element={<ProtectedRoute isAllowed={!!user.id} redirect="/login" />}>
+            <Route path="/posts" element={<PostsPage />} />
+            <Route path="/counter" element={<CounterPage />} />
+          </Route>
+          <Route
+            path="/admin"
+            element={(
+              <ProtectedRoute isAllowed={!!user.id && user.name === 'admin'} redirect="/posts">
+                <AdminPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route path="/user/signin" element={<SignInPage />} />
+          <Route path="/user/signup" element={<SignUpPage />} />
+        </Routes>
+      </>
+    );
+  }
+  export default App;
+9. components/ProtectedRoute
+    import React from 'react';
+    import { Navigate, Outlet } from 'react-router-dom';
+    export default function ProtectedRoute({ children, isAllowed, redirect }) {
+      if (!isAllowed) {
+        return <Navigate to={redirect} replace />;
+      }
+      return children || <Outlet />;
+    }
+10. src/components/SignInPage.jsx
+11. src/components/SignInPage.jsx
+12. src/redux
+12.1. redux/store.js
+  import { configureStore } from '@reduxjs/toolkit';
+  import createSagaMiddleware from 'redux-saga';
+  import userReducer from './reducers/userReducer';
+  import rootSaga from './sagas/root';
+  const sagaMiddleware = createSagaMiddleware();
+  export default configureStore({
+    reducer: {
+      user: userReducer,
+    },
+    middleware: (mid) => [...mid(), sagaMiddleware],
+  });
+  sagaMiddleware.run(rootSaga);
+12.2. redux/types.js
+    // USER
+    export const AUTH_USER = 'AUTH_USER';
+    export const CHECK_USER = 'CHECK_USER';
+12.3. redux/actions
+  actions/userActions.js
+  export const setAuth = (payload) => ({ type: SET_AUTH, payload });
+  export const logout = () => ({ type: CHECK_USER });
+12.4. redux/reducers
+      userReducer.js
+      import { LOGOUT_USER, SET_AUTH } from "../types";
+      export default function userReducer(state = {}, action) {
+        const { type, payload } = action;
+        switch (type) {
+          case SET_AUTH:
+            return payload;
+          case LOGOUT_USER:
+            return {};
+          default:
+            return state;
+        }
+      }
+12.5 redux/sagas
+  todosSagas.js
+import { call, put, takeEvery } from 'redux-saga/effects';
+import axios from 'axios';
+import { FETCH_WORDS } from '../types';
+import { setWords } from '../actions/wordsActions';
+const fetchWords = (input) =>
+  axios.post('http://localhost:3001/word', { input });
+// worker Saga: will be fired on FETCH_WORDS actions
+function* wordsWorker(action) {
+  try {
+    // yield delay(1000);
+    const res = yield call(fetchWords, action.payload);
+    yield put(setWords(res.data));
+  } catch (e) {
+    yield put({ type: 'FETCH_FAILED', message: e.message });
+  }
+}
+/*
+  Starts fetchUser on each dispatched `FETCH_WORDS` action.
+  Allows concurrent fetches of user.
+*/
+function* wordsWatcher() {
+  yield takeEvery(FETCH_WORDS, wordsWorker);
+  // yield throttle(1000, FETCH_WORDS, wordsWorker)
+}
+/*
+  Alternatively you may use takeLatest.
+  Does not allow concurrent fetches of user. If "FETCH_WORDS" gets
+  dispatched while a fetch is already pending, that pending fetch is cancelled
+  and only the latest one will be run.
+*/
+// function* mySaga() {
+//   yield takeLatest(FETCH_WORDS, wordsWorker);
+// }
+export default wordsWatcher;
+13. eslint 
+     rules: {
+    'react-hooks/exhaustive-deps': 0,
+    'react/prop-types': 0,
+    'react/react-in-jsx-scope': 0,
+    'no-restricted-exports': 0,
+    'react/jsx-filename-extension': 0,
+    'default-param-last': 0,
+    'import/prefer-default-export': 0,
+  },
+14. Material UI
+npm install @mui/material @emotion/react @emotion/styled
+npm install @mui/material @mui/styled-engine-sc styled-components
+npm install @fontsource/roboto
+npm install @mui/icons-material

@@ -1,0 +1,97 @@
+Перед секвалайзом, через терминал 
+1.создаем бд 
+postgres=# CREATE DATABASE races OWNER world_owner;
+CREATE DATABASE
+2.Переключаемся к БД
+postgres=# \c НАЗВАНИЕ БАЗЫ  ПОЛЬЗОВАТЕЛЬ;
+You are now connected to database "races" as user "world_owner".
+races=> 
+
+В VCделаем следующее:
+- npm init -y (инициализация проекта, если нет packige-json)
+- npx eslint --init (если нет eslint)
+- npx create-gitignore node (создаем gitignore, если нет)
+- npm install --save sequelize (устанавливаем пакеты sequelize)
+- npm install --save pg pg-hstore (устанавливаем драйвер для выбранной базы данных, у нас pg)
+- npm install --save-dev sequelize-cli (to install the Sequelize CLI:)
+- создаём в корне файл .sequelizerc (это поможет создать будущую конфигурацию расположения папок):
+
+const path = require('path');
+ module.exports = {
+ 'config': path.resolve('db', 'config.json'),
+ 'models-path': path.resolve('db', 'models'),
+ 'seeders-path': path.resolve('db', 'seeders'),
+ 'migrations-path': path.resolve('db', 'migrations')
+ };
+
+ - npx sequelize-cli init (инициализируем проект, после этого в зависимости от созданной инфы в файле .sequelizerc) => создается папка db 
+
+1. в файле config.json изменили данные для БД (username, password, database, dialect) на свои. Обратите внимание, что мы ввели разные данные для development и test
+ "development": {
+    "username": "world_owner",
+    "password": 123,
+    "database": "НАЗВАНИЕ БД",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+     "seederStorage": "sequelize",
+    "seederStorageTableName": "SequelizeData"
+ 
+ 
+
+Модель - это класс, который будет описывать  структуру таблицу, те это класс в которой мы говорим какие будут поля, строки, типы данных и тд 
+
+2. Создаем новую модель 
+название модели называется с большой буквы в ед.числе, потому что это описание сущности типа один студент в attributes будут поля таблицы
+npx sequelize-cli model:generate --name User --attributes firstName:string,lastName:string,email:string
+
+После создания модели создалась миграция 
+- в моделе up - будет выполняться когда мы накатываем коммиты (накатывание миграции это новое состояние бд), после накатки появится таблица с описанными в ап полями, те отдавать ее в бд, 
+- down будет выполняться когда будем откатывать бд, те таблица удалится
+
+если что-то хотим изменить и добавить какие-то атрибуты, то заходим в model => находим js файл с названием напрмер, jokey находим Jockey.init({ и вносим изменения 
+изменения нужно внести в поле в папке с миграцией в таком формате - name: {
+        type: Sequelize.STRING
+},
+
+когда создается модель, которая описывает сущность записи в таблицы и создается миграция которая создает таблицы. При создании модели и миграции в бд ничего нет, 
+пока не накатим миграцию ничего не создаться в бд
+пока что это файлы которые есть в нашем проекте
+
+типы данных инфо про них можно найти в model basics 
+
+3. Установка связей: 
+например, group_id связваем с id другой таблицы и вставляем после строчки INTERGER в файле с МИГРАЦИЕЙ
+- копируем из подсказки строчку 
+references: {
+          model: {
+              tableName: 'Users',
+          },
+      key: 'id',
+      },
+      }
+
+и вставляем в папке с миграцией в поле которое должно быть связано с ним 
+
+4. переходим в модели в static associate(models) и устанавливаем там связи между форен ки и праймари ки
+тот кто хранить ссылку (race_id) - это this.belongsTo(models.Horse, { foreignKey: 'horse_id' }); тот кто принимает ссылку/ссылается (где просто id) this.hasMany(models.Entry, { foreignKey: 'race_id' });
+
+Для бд делаем миграции, для js делаем модели (для всяких правильных джойнов, создание таблиц)
+
+5. После того как закончил заполнять миграцию и модели можно накатить/откатить миграцию
+- npx sequelize-cli db:migrate - накатить 
+- npx sequelize-cli db:migrate:undo - откатить 
+
+6. Для того чтобы заполнить таблицу нужно 
+- npx sequelize-cli seed:generate --name demo-user - меняем demo-user  на что хочется 
+открываем ее и заполняем в формате: 
+   {
+          race_id: 3,
+          jockey_id: 4,
+          horse_id: 2,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+
+ 7. Для накатывания сидов - npx sequelize-cli db:seed:all
+ 8. для откатывания сидов - npx sequelize-cli db:seed:undo 
+ 9.        
